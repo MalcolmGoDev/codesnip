@@ -69,14 +69,23 @@ def get_todays_chores():
         chore_id = chore["id"]
         name = attrs.get("summary", "")
         status = attrs.get("status", "")
-        schedule_time = attrs.get("scheduled_at", "")
+        start_time = attrs.get("start_time", "")
         cat_id = chore.get("relationships", {}).get("category", {}).get("data", {}).get("id")
         assigned_to = categories.get(cat_id, "Unassigned")
         hour = None
-        if schedule_time:
+        if start_time:
             try:
-                dt = datetime.fromisoformat(schedule_time.replace("Z", "+00:00"))
-                hour = dt.hour
+                # Parse time like "14:30" or "2:30 PM"
+                if ":" in str(start_time):
+                    time_str = str(start_time).upper()
+                    if "PM" in time_str:
+                        h = int(time_str.split(":")[0])
+                        hour = h + 12 if h != 12 else 12
+                    elif "AM" in time_str:
+                        h = int(time_str.split(":")[0])
+                        hour = 0 if h == 12 else h
+                    else:
+                        hour = int(time_str.split(":")[0])
             except:
                 pass
         chore_list.append({
@@ -135,18 +144,18 @@ def parse_query(query):
 
 def filter_by_person_and_time(chore_list, person=None, period=None):
     results = []
-    if period:
+    if period and period not in ["today", "all"]:
         start_hour, end_hour = TIME_PERIODS.get(period, (0, 24))
     else:
         start_hour, end_hour = 0, 24
     for chore in chore_list:
         if person and chore["assigned_to"].lower() != person.lower():
             continue
-        if period and period not in ["today", "all"]:
-            if chore["hour"] is None:
-                continue
+        # Only filter by time if task HAS a time AND we're filtering by period
+        if period and period not in ["today", "all"] and chore["hour"] is not None:
             if not (start_hour <= chore["hour"] < end_hour):
                 continue
+        # Tasks without a time set are included regardless of period filter
         if chore["status"] == "complete":
             continue
         results.append(chore)
